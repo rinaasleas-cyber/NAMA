@@ -1,0 +1,141 @@
+// ==UserScript==
+// @name         Floating Notes By Raffael
+// @namespace    https://viayoo.com/w8wgcs
+// @version      0.4
+// @description  Floating notes global persistence dengan tombol salin untuk Via Browser
+// @author       Raffael
+// @run-at       document-end
+// @match        *://*/*
+// @grant        GM_setValue
+// @grant        GM_getValue
+// ==/UserScript==
+
+(function() {
+    'use strict';
+
+    const style = document.createElement('style');
+    style.innerHTML = `
+        #note-btn { position: fixed; bottom: 20px; left: 20px; z-index: 100000; padding: 12px 20px; background: #4285f4; color: #fff; cursor: pointer; border-radius: 30px; font-weight: bold; box-shadow: 0 4px 8px rgba(0,0,0,0.2); font-family: sans-serif; }
+        #note-popup { position: fixed; bottom: 80px; left: 20px; z-index: 100000; width: 300px; max-height: 450px; background: #fff; border: 1px solid #ddd; padding: 15px; display: none; box-shadow: 0 8px 16px rgba(0,0,0,0.2); border-radius: 8px; font-family: sans-serif; box-sizing: border-box; }
+        #note-popup * { box-sizing: border-box; }
+        #close-btn { position: absolute; top: 8px; right: 12px; cursor: pointer; color: #888; font-size: 20px; font-weight: bold; }
+        #note-text { width: 100%; height: 80px; margin-top: 15px; margin-bottom: 10px; resize: none; border: 1px solid #ccc; border-radius: 4px; padding: 8px; font-size: 13px; }
+        #save-btn { width: 100%; padding: 8px; background: #34a853; color: #fff; border: none; cursor: pointer; border-radius: 4px; font-weight: bold; margin-bottom: 10px; }
+        #notes-list-container { max-height: 180px; overflow-y: auto; border-top: 1px solid #eee; padding-top: 10px; margin-top: 5px; }
+        .note-item { background: #f9f9f9; border: 1px solid #e0e0e0; border-radius: 4px; padding: 8px; margin-bottom: 6px; font-size: 12px; color: #333; word-break: break-word; display: flex; justify-content: space-between; align-items: center; }
+        .note-item-text { flex-grow: 1; margin-right: 8px; white-space: pre-wrap; }
+        .note-actions { display: flex; }
+        .action-btn { border: none; padding: 3px 6px; border-radius: 3px; cursor: pointer; font-size: 10px; margin-left: 4px; color: #fff; }
+        .delete-note-btn { background: #ea4335; }
+        .copy-note-btn { background: #4285f4; }
+        #clear-all-btn { width: 100%; padding: 6px; background: #f44336; color: #fff; border: none; cursor: pointer; border-radius: 4px; font-size: 11px; margin-top: 5px; font-weight: bold; }
+        .empty-msg { font-size: 12px; color: #888; text-align: center; margin: 10px 0; }
+    `;
+    document.head.appendChild(style);
+
+    const btn = document.createElement('div');
+    btn.id = 'note-btn';
+    btn.innerText = 'Notes';
+    document.body.appendChild(btn);
+
+    const popup = document.createElement('div');
+    popup.id = 'note-popup';
+    popup.innerHTML = `
+        <span id="close-btn">&times;</span>
+        <textarea id="note-text" placeholder="Tulis catatanmu di sini..."></textarea>
+        <button id="save-btn">Submit</button>
+        <div style="font-weight: bold; font-size: 13px; color: #333; margin-bottom: 5px;">Daftar Catatan Global:</div>
+        <div id="notes-list-container"></div>
+        <button id="clear-all-btn">Hapus Semua Catatan</button>
+    `;
+    document.body.appendChild(popup);
+
+    function getStoredNotes() {
+        return JSON.parse(GM_getValue('global_my_notes', '[]'));
+    }
+
+    function saveStoredNotes(notes) {
+        GM_setValue('global_my_notes', JSON.stringify(notes));
+    }
+
+    function copyToClipboard(text) {
+        navigator.clipboard.writeText(text).then(() => {
+            alert('Catatan berhasil disalin!');
+        }).catch(err => {
+            console.error('Gagal menyalin:', err);
+        });
+    }
+
+    function renderNotes() {
+        const container = document.getElementById('notes-list-container');
+        let notes = getStoredNotes();
+        container.innerHTML = '';
+
+        if (notes.length === 0) {
+            container.innerHTML = '<div class="empty-msg">Belum ada catatan tersimpan.</div>';
+            return;
+        }
+
+        notes.forEach((note, index) => {
+            const item = document.createElement('div');
+            item.className = 'note-item';
+
+            const textSpan = document.createElement('span');
+            textSpan.className = 'note-item-text';
+            textSpan.textContent = note;
+
+            const actionsDiv = document.createElement('div');
+            actionsDiv.className = 'note-actions';
+
+            const copyBtn = document.createElement('button');
+            copyBtn.className = 'action-btn copy-note-btn';
+            copyBtn.textContent = 'Salin';
+            copyBtn.onclick = () => copyToClipboard(note);
+
+            const delBtn = document.createElement('button');
+            delBtn.className = 'action-btn delete-note-btn';
+            delBtn.textContent = 'Hapus';
+            delBtn.onclick = () => deleteNote(index);
+
+            actionsDiv.appendChild(copyBtn);
+            actionsDiv.appendChild(delBtn);
+
+            item.appendChild(textSpan);
+            item.appendChild(actionsDiv);
+            container.appendChild(item);
+        });
+    }
+
+    function deleteNote(index) {
+        let notes = getStoredNotes();
+        notes.splice(index, 1);
+        saveStoredNotes(notes);
+        renderNotes();
+    }
+
+    btn.onclick = () => {
+        renderNotes();
+        popup.style.display = 'block';
+    };
+
+    document.getElementById('close-btn').onclick = () => popup.style.display = 'none';
+
+    document.getElementById('save-btn').onclick = () => {
+        const textInput = document.getElementById('note-text');
+        const text = textInput.value.trim();
+        if(text) {
+            let notes = getStoredNotes();
+            notes.push(text);
+            saveStoredNotes(notes);
+            textInput.value = '';
+            renderNotes();
+        }
+    };
+
+    document.getElementById('clear-all-btn').onclick = () => {
+        if (confirm('Yakin mau hapus semua catatan global?')) {
+            saveStoredNotes([]);
+            renderNotes();
+        }
+    };
+})();
